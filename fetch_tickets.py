@@ -31,19 +31,30 @@ EXPORT_URL = (
 
 
 def login(session):
-    # Pega a página inicial para obter o cookie de sessão
+    # Pega a página inicial para cookie de sessão
     session.get(f"{BASE_URL}/Home/Index", timeout=30)
-    # Faz o login com os campos corretos
+    
+    # Faz o login SEM seguir redirect para capturar o 302
     resp = session.post(
         f"{BASE_URL}/Home/Entrar",
         data={"txtLogin": EMAIL, "txtSenha": SENHA, "ReturnUrl": ""},
         timeout=30,
-        allow_redirects=True,
+        allow_redirects=False,
     )
-    logado = "Ticket" in resp.url or resp.url.endswith("/Ticket")
-    print(f"URL apos login: {resp.url}")
-    print(f"Status: {resp.status_code}")
-    return logado
+    print(f"Status login: {resp.status_code}")
+    print(f"Location: {resp.headers.get('Location', 'sem redirect')}")
+    print(f"Cookies: {dict(session.cookies)}")
+    
+    # Login bem-sucedido retorna 302 redirecionando para /Ticket
+    if resp.status_code == 302:
+        redirect_url = resp.headers.get("Location", "")
+        # Segue o redirect manualmente
+        session.get(f"{BASE_URL}{redirect_url}", timeout=30)
+        return True
+    
+    # Se retornou 200, pode ser erro de credencial ou outro problema
+    print(f"Resposta inesperada. Body: {resp.text[:300]}")
+    return False
 
 
 def download_xlsx(session):
