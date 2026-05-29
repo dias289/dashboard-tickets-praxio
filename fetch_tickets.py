@@ -2,6 +2,7 @@ import requests
 import pandas as pd
 import json
 import os
+import re
 from datetime import datetime
 from io import BytesIO
 
@@ -31,101 +32,29 @@ EXPORT_URL = (
 
 
 def login(session):
-    # Pega a página inicial para cookie de sessão
-    session.get(f"{BASE_URL}/Home/Index", timeout=30)
+    # Busca a página de login para obter cookie de sessão e token CSRF
+    resp = session.get(f"{BASE_URL}/Home/Index", timeout=30)
+    print(f"GET Index status: {resp.status_code}")
+    print(f"Cookies apos GET: {dict(session.cookies)}")
     
-    # Faz o login SEM seguir redirect para capturar o 302
-    resp = session.post(
-        f"{BASE_URL}/Home/Entrar",
-        data={"txtLogin": EMAIL, "txtSenha": SENHA, "ReturnUrl": ""},
-        timeout=30,
-        allow_redirects=False,
-    )
-    print(f"Status login: {resp.status_code}")
-    print(f"Location: {resp.headers.get('Location', 'sem redirect')}")
-    print(f"Cookies: {dict(session.cookies)}")
+    # Procura todos os hidden inputs no formulário
+    hidden_fields = re.findall(r'<input[^>]+type=["\']hidden["\'][^>]*>', resp.text, re.IGNORECASE)
+    print(f"Hidden fields encontrados: {hidden_fields}")
     
-    # Login bem-sucedido retorna 302 redirecionando para /Ticket
-    if resp.status_code == 302:
-        redirect_url = resp.headers.get("Location", "")
-        # Segue o redirect manualmente
-        session.get(f"{BASE_URL}{redirect_url}", timeout=30)
-        return True
-    
-    # Se retornou 200, pode ser erro de credencial ou outro problema
-    print(f"Resposta inesperada. Body: {resp.text[:300]}")
-    return False
+    # Procura especificamente o form de login
+    form_match = re.search(r'<form[^>]*action[^>]*Entrar[^>]*>(.*?)</form>', resp.text, re.DOTALL | re.IGNORECASE)
+    if form_match:
+        print(f"Form encontrado: {form_match.group(0)[:500]}")
+    else:
+        print("Form de login NAO encontrado na pagina Index")
+        # Tenta a pagina de login diretamente
+        resp2 = session.get(f"{BASE_URL}/Home/Login", timeout=30)
+        print(f"GET Login status: {resp2.status_code}")
+        form_match2 = re.search(r'<form[^>]*>(.*?)</form>', resp2.text, re.DOTALL | re.IGNORECASE)
+        if form_match2:
+            print(f"Form em /Login: {form_match2.group(0)[:500]}")
 
-
-def download_xlsx(session):
-    resp = session.get(EXPORT_URL, timeout=120)
-    resp.raise_for_status()
-    content = resp.content
-    print(f"Content-Type: {resp.headers.get('Content-Type', '?')}")
-    print(f"Tamanho: {len(content)} bytes")
-    if b"<!DOCTYPE" in content[:100] or b"<html" in content[:100]:
-        raise RuntimeError(f"Portal retornou HTML. Sessao expirou?\n{content[:300]}")
-    return content
-
-
-def process_data(xlsx_bytes):
-    df = pd.read_excel(BytesIO(xlsx_bytes), header=1)
-    df.columns = df.columns.str.strip()
-
-    col_status = next(c for c in df.columns if "Status" in c)
-    col_grupo  = next(c for c in df.columns if "Grupo" in c)
-    col_resp   = next(c for c in df.columns if "Respons" in c)
-    col_ticket = next(c for c in df.columns if "ticket" in c.lower() or "protocolo" in c.lower())
-
-    valid = ["Em andamento", "Concluído", "Cancelado", "Pendente cliente", "Pendente Cliente"]
-    df = df[df[col_status].isin(valid)].copy()
-    df[col_status] = df[col_status].str.strip()
-    df[col_grupo]  = df[col_grupo].fillna("Sem grupo").str.strip()
-    df[col_resp]   = df[col_resp].fillna("Sem responsavel").str.strip()
-
-    tickets_por_time = {str(k): int(v) for k, v in
-        df.groupby(col_grupo)[col_ticket].count().sort_values(ascending=False).items()}
-
-    em_andamento     = df[df[col_status] == "Em andamento"].copy()
-    cancelados       = df[df[col_status] == "Cancelado"].copy()
-    pendente_cliente = df[df[col_status].str.lower() == "pendente cliente"].copy()
-
-    df_cons = df[df[col_status].isin(["Em andamento", "Concluído"])].copy()
-    por_consultor = (
-        df_cons.groupby([col_resp, col_status])[col_ticket]
-        .count().unstack(fill_value=0).reset_index()
-    )
-    por_consultor.columns.name = None
-    for s in ["Em andamento", "Concluído"]:
-        if s not in por_consultor.columns:
-            por_consultor[s] = 0
-    por_consultor["Total"] = por_consultor["Em andamento"] + por_consultor["Concluído"]
-    por_consultor = por_consultor.sort_values("Total", ascending=False)
-
-    def to_rec(d):
-        return json.loads(d.to_json(orient="records", force_ascii=False, date_format="iso"))
-
-    return {
-        "atualizado_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "totais": {
-            "total":            int(len(df)),
-            "em_andamento":     int(len(em_andamento)),
-            "cancelados":       int(len(cancelados)),
-            "pendente_cliente": int(len(pendente_cliente)),
-            "concluidos":       int(len(df[df[col_status] == "Concluído"])),
-        },
-        "tickets_por_time":  tickets_por_time,
-        "em_andamento":      to_rec(em_andamento),
-        "cancelados":        to_rec(cancelados),
-        "pendente_cliente":  to_rec(pendente_cliente),
-        "por_consultor":     to_rec(por_consultor),
-        "col_names": {
-            "status": col_status,
-            "grupo":  col_grupo,
-            "resp":   col_resp,
-            "ticket": col_ticket,
-        },
-    }
+    return False  # Por agora só diagnóstico
 
 
 def main():
@@ -135,24 +64,8 @@ def main():
                       "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Referer": BASE_URL,
     })
-
-    print("Fazendo login...")
-    if not login(session):
-        raise RuntimeError("Falha no login — verifique as credenciais.")
-    print("Login OK")
-
-    print("Baixando relatorio...")
-    xlsx_bytes = download_xlsx(session)
-    print(f"Arquivo recebido ({len(xlsx_bytes):,} bytes)")
-
-    print("Processando dados...")
-    data = process_data(xlsx_bytes)
-    print(f"{data['totais']['total']} tickets processados")
-
-    os.makedirs("data", exist_ok=True)
-    with open("data/tickets.json", "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"Salvo. Atualizado em: {data['atualizado_em']}")
+    print("Diagnosticando login...")
+    login(session)
 
 
 if __name__ == "__main__":
