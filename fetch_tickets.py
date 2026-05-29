@@ -5,7 +5,6 @@ import os
 from datetime import datetime
 from io import BytesIO
 
-# ── Credenciais (via GitHub Secrets) ──────────────────────────────────────────
 EMAIL = os.environ["PORTAL_EMAIL"]
 SENHA = os.environ["PORTAL_SENHA"]
 
@@ -31,109 +30,73 @@ EXPORT_URL = (
     "[%22RespostaIA%22,true,34,80]]&ordemGrid=[]"
 )
 
-def login(session: requests.Session) -> bool:
-    """Faz login no portal e retorna True se bem-sucedido."""
-    # Primeiro acessa a página de login para pegar o token anti-CSRF se houver
+
+def login(session):
     resp = session.get(LOGIN_URL, timeout=30)
     resp.raise_for_status()
-
-    # Tenta extrair __RequestVerificationToken se existir
     token = ""
     if "__RequestVerificationToken" in resp.text:
         import re
-        match = re.search(
-            r'name="__RequestVerificationToken"[^>]+value="([^"]+)"', resp.text
-        )
+        match = re.search(r'name="__RequestVerificationToken"[^>]+value="([^"]+)"', resp.text)
         if match:
             token = match.group(1)
+    payload = {"Email": EMAIL, "Senha": SENHA}
+    if token:
+        payload["__RequestVerificationToken"] = token
+    login_post = session.post(f"{BASE_URL}/Home/Login", data=payload, timeout=30, allow_redirects=True)
+    return "Ticket" in login_post.url or login_post.status_code == 200
 
-    payload = {
-        "Email": EMAIL,
-        "Senha": SENHA,
-    }
-   def download_xlsx(session: requests.Session) -> bytes:
-    """Baixa o arquivo xlsx do portal."""
+
+def download_xlsx(session):
     resp = session.get(EXPORT_URL, timeout=120)
     resp.raise_for_status()
     content = resp.content
-    # Diagnóstico
-    print(f"Content-Type: {resp.headers.get('Content-Type','?')}")
+    print(f"Content-Type: {resp.headers.get('Content-Type', '?')}")
     print(f"Tamanho: {len(content)} bytes")
     print(f"Primeiros 300 bytes: {content[:300]}")
-    # Se for HTML (redirecionou para login), lança erro claro
-    if content[:5] in [b'<html', b'<!DOC', b'<HTML']:
-        raise RuntimeError(f"Portal retornou HTML em vez de xlsx. Sessão inválida?\n{content[:500]}")
+    if content[:5] in [b"<html", b"<!DOC", b"<HTML"]:
+        raise RuntimeError(f"Portal retornou HTML. Sessão inválida?\n{content[:500]}")
     return content
-    )
 
-    # Considera logado se não voltou para a página de login
-    return "Ticket" in login_post.url or login_post.status_code == 200
 
-def download_xlsx(session: requests.Session) -> bytes:
-    """Baixa o arquivo xlsx do portal."""
-    resp = session.get(EXPORT_URL, timeout=120)
-    resp.raise_for_status()
-    return resp.content
-
-def process_data(xlsx_bytes: bytes) -> dict:
-    """Processa o xlsx e retorna um dicionário com os dados do dashboard."""
+def process_data(xlsx_bytes):
     df = pd.read_excel(BytesIO(xlsx_bytes), header=1)
     df.columns = df.columns.str.strip()
 
-    # Normaliza nomes de colunas relevantes
-    col_status    = next(c for c in df.columns if "Status"      in c)
-    col_grupo     = next(c for c in df.columns if "Grupo"       in c)
-    col_resp      = next(c for c in df.columns if "Respons"     in c)
-    col_ticket    = next(c for c in df.columns if "ticket" in c.lower() or "protocolo" in c.lower())
+    col_status = next(c for c in df.columns if "Status" in c)
+    col_grupo  = next(c for c in df.columns if "Grupo" in c)
+    col_resp   = next(c for c in df.columns if "Respons" in c)
+    col_ticket = next(c for c in df.columns if "ticket" in c.lower() or "protocolo" in c.lower())
 
-    # Remove linhas sem status válido
     valid_statuses = ["Em andamento", "Concluído", "Cancelado", "Pendente cliente", "Pendente Cliente"]
     df = df[df[col_status].isin(valid_statuses)].copy()
     df[col_status] = df[col_status].str.strip()
     df[col_grupo]  = df[col_grupo].fillna("Sem grupo").str.strip()
     df[col_resp]   = df[col_resp].fillna("Sem responsável").str.strip()
 
-    # ── 1. Tickets por time (Grupo de Atendimento) ────────────────────────────
-    tickets_por_time = (
-        df.groupby(col_grupo)[col_ticket]
-        .count()
-        .sort_values(ascending=False)
-        .to_dict()
-    )
-    # Converte chaves para str (segurança para JSON)
-    tickets_por_time = {str(k): int(v) for k, v in tickets_por_time.items()}
+    tickets_por_time = {str(k): int(v) for k, v in
+        df.groupby(col_grupo)[col_ticket].count().sort_values(ascending=False).items()}
 
-    # ── 2. Em andamento ───────────────────────────────────────────────────────
-    em_andamento = df[df[col_status] == "Em andamento"].copy()
+    em_andamento     = df[df[col_status] == "Em andamento"].copy()
+    cancelados       = df[df[col_status] == "Cancelado"].copy()
+    pendente_cliente = df[df[col_status].str.lower() == "pendente cliente"].copy()
 
-    # ── 3. Cancelados ─────────────────────────────────────────────────────────
-    cancelados = df[df[col_status] == "Cancelado"].copy()
-
-    # ── 4. Pendente Cliente ───────────────────────────────────────────────────
-    pendente_cliente = df[
-        df[col_status].str.lower() == "pendente cliente"
-    ].copy()
-
-    # ── 5. Tickets por consultor (em andamento + concluídos) ──────────────────
     df_cons = df[df[col_status].isin(["Em andamento", "Concluído"])].copy()
     por_consultor = (
         df_cons.groupby([col_resp, col_status])[col_ticket]
-        .count()
-        .unstack(fill_value=0)
-        .reset_index()
+        .count().unstack(fill_value=0).reset_index()
     )
     por_consultor.columns.name = None
-    # Garante as colunas existem
     for s in ["Em andamento", "Concluído"]:
         if s not in por_consultor.columns:
             por_consultor[s] = 0
     por_consultor["Total"] = por_consultor["Em andamento"] + por_consultor["Concluído"]
     por_consultor = por_consultor.sort_values("Total", ascending=False)
 
-    def df_to_records(d: pd.DataFrame) -> list:
+    def to_records(d):
         return json.loads(d.to_json(orient="records", force_ascii=False, date_format="iso"))
 
-    result = {
+    return {
         "atualizado_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
         "totais": {
             "total":            int(len(df)),
@@ -142,19 +105,14 @@ def process_data(xlsx_bytes: bytes) -> dict:
             "pendente_cliente": int(len(pendente_cliente)),
             "concluidos":       int(len(df[df[col_status] == "Concluído"])),
         },
-        "tickets_por_time":     tickets_por_time,
-        "em_andamento":         df_to_records(em_andamento),
-        "cancelados":           df_to_records(cancelados),
-        "pendente_cliente":     df_to_records(pendente_cliente),
-        "por_consultor":        df_to_records(por_consultor),
-        "col_names": {
-            "status":   col_status,
-            "grupo":    col_grupo,
-            "resp":     col_resp,
-            "ticket":   col_ticket,
-        }
+        "tickets_por_time":  tickets_por_time,
+        "em_andamento":      to_records(em_andamento),
+        "cancelados":        to_records(cancelados),
+        "pendente_cliente":  to_records(pendente_cliente),
+        "por_consultor":     to_records(por_consultor),
+        "col_names": {"status": col_status, "grupo": col_grupo, "resp": col_resp, "ticket": col_ticket},
     }
-    return result
+
 
 def main():
     session = requests.Session()
@@ -164,24 +122,24 @@ def main():
         "Referer": BASE_URL,
     })
 
-    print("🔐 Fazendo login...")
+    print("Fazendo login...")
     if not login(session):
-        raise RuntimeError("Falha no login — verifique as credenciais.")
-    print("✅ Login OK")
+        raise RuntimeError("Falha no login.")
+    print("Login OK")
 
-    print("📥 Baixando relatório...")
+    print("Baixando relatorio...")
     xlsx_bytes = download_xlsx(session)
-    print(f"✅ Arquivo recebido ({len(xlsx_bytes):,} bytes)")
+    print(f"Arquivo recebido ({len(xlsx_bytes):,} bytes)")
 
-    print("⚙️  Processando dados...")
+    print("Processando dados...")
     data = process_data(xlsx_bytes)
-    print(f"✅ {data['totais']['total']} tickets processados")
+    print(f"{data['totais']['total']} tickets processados")
 
     os.makedirs("data", exist_ok=True)
     with open("data/tickets.json", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print("💾 data/tickets.json salvo")
-    print(f"🕐 Atualizado em: {data['atualizado_em']}")
+    print(f"Salvo. Atualizado em: {data['atualizado_em']}")
+
 
 if __name__ == "__main__":
     main()
