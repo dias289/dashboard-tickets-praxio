@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dashboard de Tickets — Praxio</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:        #0d0f14;
+    --surface:   #161920;
+    --surface2:  #1e2230;
+    --border:    #2a2f42;
+    --accent:    #e8401c;
+    --accent2:   #f7a34b;
+    --green:     #2dce89;
+    --blue:      #4a9eff;
+    --yellow:    #f7c948;
+    --text:      #e8eaf2;
+    --muted:     #7a8099;
+    --font-head: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-mark {
+    width: 36px; height: 36px; background: var(--accent);
+    border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; font-family: var(--font-head);
+    font-weight: 800; font-size: 18px; color: #fff;
+  }
+  .logo-text { font-family: var(--font-head); font-weight: 700; font-size: 18px; }
+  .logo-text span { color: var(--accent); }
+  #ultima-atualizacao {
+    font-size: 12px; color: var(--muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .dot-live {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green); animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: .3; }
+  }
+
+  /* ── Layout ── */
+  main { padding: 28px 32px; max-width: 1400px; margin: 0 auto; }
+
+  /* ── KPI Cards ── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3,1fr); } }
+  @media (max-width: 700px)  { .kpi-grid { grid-template-columns: repeat(2,1fr); } }
+
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color .2s, transform .2s;
+  }
+  .kpi:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .kpi.active { border-color: var(--accent); background: var(--surface2); }
+  .kpi::before {
+    content: ''; position: absolute; top: 0; left: 0;
+    width: 4px; height: 100%; border-radius: 14px 0 0 14px;
+  }
+  .kpi[data-color="red"]::before    { background: var(--accent); }
+  .kpi[data-color="orange"]::before { background: var(--accent2); }
+  .kpi[data-color="green"]::before  { background: var(--green); }
+  .kpi[data-color="blue"]::before   { background: var(--blue); }
+  .kpi[data-color="yellow"]::before { background: var(--yellow); }
+
+  .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 10px; }
+  .kpi-value { font-family: var(--font-head); font-size: 38px; font-weight: 800; line-height: 1; }
+  .kpi[data-color="red"]    .kpi-value { color: var(--accent); }
+  .kpi[data-color="orange"] .kpi-value { color: var(--accent2); }
+  .kpi[data-color="green"]  .kpi-value { color: var(--green); }
+  .kpi[data-color="blue"]   .kpi-value { color: var(--blue); }
+  .kpi[data-color="yellow"] .kpi-value { color: var(--yellow); }
+
+  /* ── Two-column grid ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* ── Panels ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .panel-full { margin-bottom: 20px; }
+  .panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel-title {
+    font-family: var(--font-head); font-weight: 700; font-size: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title .badge {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 20px; padding: 2px 10px; font-size: 11px;
+    font-family: var(--font-body); font-weight: 400; color: var(--muted);
+  }
+  .panel-body { padding: 0; }
+
+  /* ── Barras por time ── */
+  .time-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .time-item { display: flex; flex-direction: column; gap: 6px; }
+  .time-row { display: flex; justify-content: space-between; align-items: center; }
+  .time-name { font-weight: 500; font-size: 13px; }
+  .time-count { font-family: var(--font-head); font-weight: 700; font-size: 15px; color: var(--accent2); }
+  .bar-track { height: 6px; background: var(--surface2); border-radius: 99px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .8s cubic-bezier(.4,0,.2,1); }
+
+  /* ── Tabelas ── */
+  .table-wrap { overflow-x: auto; max-height: 400px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    background: var(--surface2); padding: 10px 14px;
+    text-align: left; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--muted); font-weight: 500;
+    position: sticky; top: 0; z-index: 1;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  td { padding: 10px 14px; vertical-align: middle; }
+  td a { color: var(--blue); text-decoration: none; font-size: 12px; }
+  td a:hover { text-decoration: underline; }
+
+  .badge-status {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 500;
+  }
+  .badge-status.andamento  { background: rgba(74,158,255,.12); color: var(--blue); }
+  .badge-status.cancelado  { background: rgba(232,64,28,.12);  color: var(--accent); }
+  .badge-status.pendente   { background: rgba(247,163,75,.12); color: var(--accent2); }
+  .badge-status.concluido  { background: rgba(45,206,137,.12); color: var(--green); }
+
+  /* ── Consultor table ── */
+  .consultor-bar {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .consultor-mini-bar {
+    flex: 1; height: 4px; background: var(--surface2);
+    border-radius: 99px; overflow: hidden;
+  }
+  .consultor-mini-fill {
+    height: 100%; background: var(--green); border-radius: 99px;
+    transition: width .8s;
+  }
+
+  /* ── Seção de detalhe ── */
+  #detalhe-section {
+    display: none; margin-bottom: 20px;
+  }
+  #detalhe-section.show { display: block; }
+  #detalhe-titulo { font-family: var(--font-head); font-size: 13px; font-weight: 700; }
+
+  /* ── Estado de carregamento ── */
+  #loading {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 16px; z-index: 999;
+  }
+  #loading.hidden { display: none; }
+  .spinner {
+    width: 40px; height: 40px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading p { color: var(--muted); font-size: 13px; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p>Carregando dados…</p>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">P</div>
+    <div class="logo-text">Dashboard <span>Tickets</span></div>
+  </div>
+  <div id="ultima-atualizacao">
+    <span class="dot-live"></span>
+    <span id="data-atualizacao">—</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi" data-color="blue" onclick="mostrarDetalhe('todos')">
+      <div class="kpi-label">Total de Tickets</div>
+      <div class="kpi-value" id="kpi-total">—</div>
+    </div>
+    <div class="kpi" data-color="orange" onclick="mostrarDetalhe('andamento')">
+      <div class="kpi-label">Em Andamento</div>
+      <div class="kpi-value" id="kpi-andamento">—</div>
+    </div>
+    <div class="kpi" data-color="yellow" onclick="mostrarDetalhe('pendente')">
+      <div class="kpi-label">Pendente Cliente</div>
+      <div class="kpi-value" id="kpi-pendente">—</div>
+    </div>
+    <div class="kpi" data-color="red" onclick="mostrarDetalhe('cancelado')">
+      <div class="kpi-label">Cancelados</div>
+      <div class="kpi-value" id="kpi-cancelado">—</div>
+    </div>
+    <div class="kpi" data-color="green" onclick="mostrarDetalhe('concluido')">
+      <div class="kpi-label">Concluídos</div>
+      <div class="kpi-value" id="kpi-concluido">—</div>
+    </div>
+  </div>
+
+  <!-- Detalhe ao clicar no KPI -->
+  <div id="detalhe-section">
+    <div class="panel panel-full">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span id="detalhe-titulo">Detalhes</span>
+          <span class="badge" id="detalhe-count">0</span>
+        </div>
+        <button onclick="fecharDetalhe()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;">✕</button>
+      </div>
+      <div class="panel-body">
+        <div class="table-wrap">
+          <table id="detalhe-tabela">
+            <thead><tr id="detalhe-head"></tr></thead>
+            <tbody id="detalhe-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tickets por time + Em andamento -->
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Tickets por Time</div>
+      </div>
+      <div class="panel-body">
+        <div class="time-list" id="time-list">—</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          Em Andamento
+          <span class="badge" id="badge-andamento">0</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Responsável</th>
+            </tr></thead>
+            <tbody id="tbody-andamento"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pendente cliente + Cancelados -->
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          Pendente Cliente
+          <span class="badge" id="badge-pendente">0</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Responsável</th>
+            </tr></thead>
+            <tbody id="tbody-pendente"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          Cancelados
+          <span class="badge" id="badge-cancelado">0</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Responsável</th>
+            </tr></thead>
+            <tbody id="tbody-cancelado"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Consultores -->
+  <div class="panel panel-full">
+    <div class="panel-header">
+      <div class="panel-title">
+        Tickets por Consultor
+        <span class="badge">Em andamento + Concluídos</span>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Consultor</th>
+            <th>Em Andamento</th>
+            <th>Concluídos</th>
+            <th>Total</th>
+            <th style="width:160px">Progresso</th>
+          </tr></thead>
+          <tbody id="tbody-consultores"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+let DATA = null;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function fmt(v) { return v == null ? '—' : String(v).trim() || '—'; }
+
+function badgeStatus(s) {
+  const cls = s === 'Em andamento' ? 'andamento'
+            : s === 'Cancelado'    ? 'cancelado'
+            : (s||'').toLowerCase().includes('pendente') ? 'pendente'
+            : 'concluido';
+  return `<span class="badge-status ${cls}">${fmt(s)}</span>`;
+}
+
+function rowTicket(t, cols) {
+  const ticket = fmt(t[cols.ticket]);
+  const url    = `https://portaldocliente.praxio.com.br/Ticket/${ticket.replace(/\D/g,'')}`;
+  return `
+    <td><a href="${url}" target="_blank">${ticket}</a></td>
+    <td>${fmt(t['Assunto'] || t['AssuntoPesquisa'] || t[Object.keys(t).find(k=>k.toLowerCase().includes('assunto'))||''])}</td>
+    <td>${fmt(t['Cliente'] || t['NomeCliente'] || t[Object.keys(t).find(k=>k.toLowerCase().includes('cliente'))||''])}</td>
+    <td>${fmt(t[cols.resp])}</td>`;
+}
+
+// ── Renderização ───────────────────────────────────────────────────────────
+function render(data) {
+  DATA = data;
+  const cols = data.col_names;
+
+  // KPIs
+  document.getElementById('kpi-total').textContent     = data.totais.total;
+  document.getElementById('kpi-andamento').textContent = data.totais.em_andamento;
+  document.getElementById('kpi-pendente').textContent  = data.totais.pendente_cliente;
+  document.getElementById('kpi-cancelado').textContent = data.totais.cancelados;
+  document.getElementById('kpi-concluido').textContent = data.totais.concluidos;
+  document.getElementById('data-atualizacao').textContent = 'Atualizado: ' + data.atualizado_em;
+
+  // Badges
+  document.getElementById('badge-andamento').textContent = data.totais.em_andamento;
+  document.getElementById('badge-pendente').textContent  = data.totais.pendente_cliente;
+  document.getElementById('badge-cancelado').textContent = data.totais.cancelados;
+
+  // ── Por time ──
+  const times = Object.entries(data.tickets_por_time);
+  const maxT  = Math.max(...times.map(([,v])=>v), 1);
+  document.getElementById('time-list').innerHTML = times.map(([nome, qtd]) => `
+    <div class="time-item">
+      <div class="time-row">
+        <span class="time-name">${nome}</span>
+        <span class="time-count">${qtd}</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${(qtd/maxT*100).toFixed(1)}%"></div>
+      </div>
+    </div>`).join('');
+
+  // ── Em andamento ──
+  document.getElementById('tbody-andamento').innerHTML =
+    data.em_andamento.slice(0,50).map(t => `<tr>${rowTicket(t,cols)}</tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:20px">Nenhum ticket</td></tr>';
+
+  // ── Pendente cliente ──
+  document.getElementById('tbody-pendente').innerHTML =
+    data.pendente_cliente.slice(0,50).map(t => `<tr>${rowTicket(t,cols)}</tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:20px">Nenhum ticket</td></tr>';
+
+  // ── Cancelados ──
+  document.getElementById('tbody-cancelado').innerHTML =
+    data.cancelados.slice(0,50).map(t => `<tr>${rowTicket(t,cols)}</tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:20px">Nenhum ticket</td></tr>';
+
+  // ── Consultores ──
+  const maxC = Math.max(...data.por_consultor.map(r => r.Total || 0), 1);
+  document.getElementById('tbody-consultores').innerHTML =
+    data.por_consultor.map(r => {
+      const pct = ((r.Total||0) / maxC * 100).toFixed(1);
+      return `<tr>
+        <td style="font-weight:500">${fmt(r[cols.resp])}</td>
+        <td style="color:var(--blue)">${r['Em andamento']||0}</td>
+        <td style="color:var(--green)">${r['Concluído']||0}</td>
+        <td style="font-family:var(--font-head);font-weight:700">${r.Total||0}</td>
+        <td>
+          <div class="consultor-bar">
+            <div class="consultor-mini-bar">
+              <div class="consultor-mini-fill" style="width:${pct}%"></div>
+            </div>
+            <span style="font-size:11px;color:var(--muted);min-width:32px;text-align:right">${pct}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+
+  document.getElementById('loading').classList.add('hidden');
+}
+
+// ── Detalhe ao clicar KPI ─────────────────────────────────────────────────
+function mostrarDetalhe(tipo) {
+  if (!DATA) return;
+  const cols = DATA.col_names;
+  let rows, titulo;
+  if (tipo === 'andamento') { rows = DATA.em_andamento;    titulo = 'Em Andamento'; }
+  else if (tipo === 'pendente') { rows = DATA.pendente_cliente; titulo = 'Pendente Cliente'; }
+  else if (tipo === 'cancelado') { rows = DATA.cancelados;  titulo = 'Cancelados'; }
+  else if (tipo === 'concluido') {
+    // concluídos não vêm como lista separada — filtramos pelo status
+    titulo = 'Concluídos';
+    rows = [];  // sem dados detalhados para concluídos no JSON atual
+  } else { return; }
+
+  document.getElementById('detalhe-titulo').textContent = titulo;
+  document.getElementById('detalhe-count').textContent  = rows.length;
+
+  const head = document.getElementById('detalhe-head');
+  head.innerHTML = '<th>Ticket</th><th>Assunto</th><th>Cliente</th><th>Responsável</th><th>Status</th><th>Grupo</th>';
+
+  document.getElementById('detalhe-body').innerHTML = rows.map(t => `<tr>
+    ${rowTicket(t, cols)}
+    <td>${badgeStatus(t[cols.status])}</td>
+    <td>${fmt(t[cols.grupo])}</td>
+  </tr>`).join('') || '<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:20px">Nenhum registro</td></tr>';
+
+  const sec = document.getElementById('detalhe-section');
+  sec.classList.add('show');
+  sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function fecharDetalhe() {
+  document.getElementById('detalhe-section').classList.remove('show');
+}
+
+// ── Busca o JSON ──────────────────────────────────────────────────────────
+fetch('data/tickets.json')
+  .then(r => { if (!r.ok) throw new Error('Arquivo não encontrado'); return r.json(); })
+  .then(render)
+  .catch(err => {
+    document.getElementById('loading').innerHTML =
+      `<p style="color:var(--accent)">⚠️ Erro ao carregar dados: ${err.message}</p>
+       <p style="color:var(--muted);margin-top:8px;font-size:12px">Execute o script fetch_tickets.py para gerar o arquivo data/tickets.json</p>`;
+  });
+</script>
+</body>
+</html>

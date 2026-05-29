@@ -1,0 +1,182 @@
+import requests
+import pandas as pd
+import json
+import os
+from datetime import datetime
+from io import BytesIO
+
+# ── Credenciais (via GitHub Secrets) ──────────────────────────────────────────
+EMAIL = os.environ["PORTAL_EMAIL"]
+SENHA = os.environ["PORTAL_SENHA"]
+
+BASE_URL = "https://portaldocliente.praxio.com.br"
+LOGIN_URL = f"{BASE_URL}/Home/Index"
+EXPORT_URL = (
+    f"{BASE_URL}/Ticket/ExportTo?tipo=2&configsGrid="
+    "[[%22Protocolo%22,true,2,87.090909],[%22AssuntoPesquisa%22,true,3,382.090909],"
+    "[%22DataHoraPrevisaoAtendimento%22,true,7,70.090909],[%22Nivel%22,true,10,96.090909],"
+    "[%22Status%22,true,4,135.090909],[%22Origem%22,true,5,84.090909],"
+    "[%22DataHoraAbertura%22,true,6,160.090909],[%22NomeCliente%22,true,9,250.090909],"
+    "[%22BusinessUnit%22,true,19,150.090909],[%22CodigoSistema%22,false,13,80],"
+    "[%22CodigoModulo%22,true,11,103.090909],[%22NomeOperadorContato%22,true,12,205.090909],"
+    "[%22QuantidadeTramites%22,false,18,110],[%22NomeOperadorResponsavel%22,true,13,150.090909],"
+    "[%22DataHoraTramite%22,true,8,180.090909],[%22DataHoraConclusao%22,true,15,155.090909],"
+    "[%22Sinalizador%22,true,0,54.090908999999996],[%22Natureza%22,true,1,82.090909],"
+    "[%22DataProximaAcao%22,false,20,140],[%22IdGrupoAtendimento%22,true,14,150.090909],"
+    "[%22Anexo%22,false,21,80],[%22CurvaAbc%22,false,23,80],[%22AvaliacaoCliente%22,false,24,80],"
+    "[%22GlobusCloud%22,false,25,85],[%22ClienteCritico%22,false,26,90],"
+    "[%22ClienteVip%22,false,27,80],[%22AtendeUsuarioChave%22,false,31,150],"
+    "[%22GrupoTipo%22,true,16,105.090909],[%22TempoContrato%22,true,18,150.090909],"
+    "[%22Adequa%C3%A7%C3%B5es%22,true,17,160.090909],[%22DataPrevistaEntrega%22,false,33,155],"
+    "[%22RespostaIA%22,true,34,80]]&ordemGrid=[]"
+)
+
+def login(session: requests.Session) -> bool:
+    """Faz login no portal e retorna True se bem-sucedido."""
+    # Primeiro acessa a página de login para pegar o token anti-CSRF se houver
+    resp = session.get(LOGIN_URL, timeout=30)
+    resp.raise_for_status()
+
+    # Tenta extrair __RequestVerificationToken se existir
+    token = ""
+    if "__RequestVerificationToken" in resp.text:
+        import re
+        match = re.search(
+            r'name="__RequestVerificationToken"[^>]+value="([^"]+)"', resp.text
+        )
+        if match:
+            token = match.group(1)
+
+    payload = {
+        "Email": EMAIL,
+        "Senha": SENHA,
+    }
+    if token:
+        payload["__RequestVerificationToken"] = token
+
+    login_post = session.post(
+        f"{BASE_URL}/Home/Login",
+        data=payload,
+        timeout=30,
+        allow_redirects=True,
+    )
+
+    # Considera logado se não voltou para a página de login
+    return "Ticket" in login_post.url or login_post.status_code == 200
+
+def download_xlsx(session: requests.Session) -> bytes:
+    """Baixa o arquivo xlsx do portal."""
+    resp = session.get(EXPORT_URL, timeout=120)
+    resp.raise_for_status()
+    return resp.content
+
+def process_data(xlsx_bytes: bytes) -> dict:
+    """Processa o xlsx e retorna um dicionário com os dados do dashboard."""
+    df = pd.read_excel(BytesIO(xlsx_bytes), header=1)
+    df.columns = df.columns.str.strip()
+
+    # Normaliza nomes de colunas relevantes
+    col_status    = next(c for c in df.columns if "Status"      in c)
+    col_grupo     = next(c for c in df.columns if "Grupo"       in c)
+    col_resp      = next(c for c in df.columns if "Respons"     in c)
+    col_ticket    = next(c for c in df.columns if "ticket" in c.lower() or "protocolo" in c.lower())
+
+    # Remove linhas sem status válido
+    valid_statuses = ["Em andamento", "Concluído", "Cancelado", "Pendente cliente", "Pendente Cliente"]
+    df = df[df[col_status].isin(valid_statuses)].copy()
+    df[col_status] = df[col_status].str.strip()
+    df[col_grupo]  = df[col_grupo].fillna("Sem grupo").str.strip()
+    df[col_resp]   = df[col_resp].fillna("Sem responsável").str.strip()
+
+    # ── 1. Tickets por time (Grupo de Atendimento) ────────────────────────────
+    tickets_por_time = (
+        df.groupby(col_grupo)[col_ticket]
+        .count()
+        .sort_values(ascending=False)
+        .to_dict()
+    )
+    # Converte chaves para str (segurança para JSON)
+    tickets_por_time = {str(k): int(v) for k, v in tickets_por_time.items()}
+
+    # ── 2. Em andamento ───────────────────────────────────────────────────────
+    em_andamento = df[df[col_status] == "Em andamento"].copy()
+
+    # ── 3. Cancelados ─────────────────────────────────────────────────────────
+    cancelados = df[df[col_status] == "Cancelado"].copy()
+
+    # ── 4. Pendente Cliente ───────────────────────────────────────────────────
+    pendente_cliente = df[
+        df[col_status].str.lower() == "pendente cliente"
+    ].copy()
+
+    # ── 5. Tickets por consultor (em andamento + concluídos) ──────────────────
+    df_cons = df[df[col_status].isin(["Em andamento", "Concluído"])].copy()
+    por_consultor = (
+        df_cons.groupby([col_resp, col_status])[col_ticket]
+        .count()
+        .unstack(fill_value=0)
+        .reset_index()
+    )
+    por_consultor.columns.name = None
+    # Garante as colunas existem
+    for s in ["Em andamento", "Concluído"]:
+        if s not in por_consultor.columns:
+            por_consultor[s] = 0
+    por_consultor["Total"] = por_consultor["Em andamento"] + por_consultor["Concluído"]
+    por_consultor = por_consultor.sort_values("Total", ascending=False)
+
+    def df_to_records(d: pd.DataFrame) -> list:
+        return json.loads(d.to_json(orient="records", force_ascii=False, date_format="iso"))
+
+    result = {
+        "atualizado_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "totais": {
+            "total":            int(len(df)),
+            "em_andamento":     int(len(em_andamento)),
+            "cancelados":       int(len(cancelados)),
+            "pendente_cliente": int(len(pendente_cliente)),
+            "concluidos":       int(len(df[df[col_status] == "Concluído"])),
+        },
+        "tickets_por_time":     tickets_por_time,
+        "em_andamento":         df_to_records(em_andamento),
+        "cancelados":           df_to_records(cancelados),
+        "pendente_cliente":     df_to_records(pendente_cliente),
+        "por_consultor":        df_to_records(por_consultor),
+        "col_names": {
+            "status":   col_status,
+            "grupo":    col_grupo,
+            "resp":     col_resp,
+            "ticket":   col_ticket,
+        }
+    }
+    return result
+
+def main():
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": BASE_URL,
+    })
+
+    print("🔐 Fazendo login...")
+    if not login(session):
+        raise RuntimeError("Falha no login — verifique as credenciais.")
+    print("✅ Login OK")
+
+    print("📥 Baixando relatório...")
+    xlsx_bytes = download_xlsx(session)
+    print(f"✅ Arquivo recebido ({len(xlsx_bytes):,} bytes)")
+
+    print("⚙️  Processando dados...")
+    data = process_data(xlsx_bytes)
+    print(f"✅ {data['totais']['total']} tickets processados")
+
+    os.makedirs("data", exist_ok=True)
+    with open("data/tickets.json", "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    print("💾 data/tickets.json salvo")
+    print(f"🕐 Atualizado em: {data['atualizado_em']}")
+
+if __name__ == "__main__":
+    main()

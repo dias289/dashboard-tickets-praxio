@@ -1,0 +1,58 @@
+{
+  "atualizado_em": "29/05/2026 19:00",
+  "totais": {
+    "total": 4824,
+    "em_andamento": 9,
+    "cancelados": 1,
+    "pendente_cliente": 7,
+    "concluidos": 976
+  },
+  "tickets_por_time": {
+    "Siga-i ADM": 3850,
+    "Siga Emissor": 820,
+    "Siga One - ADM": 154
+  },
+  "em_andamento": [
+    {"Protocolo":"0526-003585","AssuntoPesquisa":"Relatórios","Status":"Em andamento","NomeCliente":"PANAMBIENSE","NomeOperadorResponsavel":"PEDRO.JORDAO","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-003728","AssuntoPesquisa":"Erro ao salvar Comprovante","Status":"Em andamento","NomeCliente":"SAO BENEDITO","NomeOperadorResponsavel":"WILLIANS.SANTOS","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-004363","AssuntoPesquisa":"Anexar Documentos","Status":"Em andamento","NomeCliente":"VIACAO ESTRELA GUIA","NomeOperadorResponsavel":"PEDRO.JORDAO","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-004143","AssuntoPesquisa":"Campo para informar CIOT","Status":"Em andamento","NomeCliente":"THINAL TRANSPORTES","NomeOperadorResponsavel":"VICTOR.SOUSA","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-004527","AssuntoPesquisa":"Erro no acerto de funcionário","Status":"Em andamento","NomeCliente":"VIACAO BRASIL","NomeOperadorResponsavel":"MATHEUS.SILVA","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-004424","AssuntoPesquisa":"INCONSISTENCIA SPED FISCAL","Status":"Em andamento","NomeCliente":"CATTANI SUL","NomeOperadorResponsavel":"MATHEUS.SILVA","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-005068","AssuntoPesquisa":"Visualização de Relatório","Status":"Em andamento","NomeCliente":"TRANSMOREIRA","NomeOperadorResponsavel":"PEDRO.JORDAO","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-005733","AssuntoPesquisa":"Importação de lançamentos Total Bus","Status":"Em andamento","NomeCliente":"SANTA FE - MG","NomeOperadorResponsavel":"MATHEUS.SILVA","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-005244","AssuntoPesquisa":"Gerar Lote de Lançamento Contábeis","Status":"Em andamento","NomeCliente":"A3P","NomeOperadorResponsavel":"MATHEUS.SILVA","Grupo de Atendimento":"Siga-i ADM"}
+  ],
+  "cancelados": [
+    {"Protocolo":"0526-001234","AssuntoPesquisa":"Ticket cancelado a pedido","Status":"Cancelado","NomeCliente":"EMPRESA TESTE","NomeOperadorResponsavel":"FELIPE.DIAS","Grupo de Atendimento":"Siga-i ADM"}
+  ],
+  "pendente_cliente": [
+    {"Protocolo":"0426-004783","AssuntoPesquisa":"AGENDA DE VIAGENS","Status":"Pendente cliente","NomeCliente":"EXPRESSO SINIMBU","NomeOperadorResponsavel":"DANIEL HEILBUTH","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-005777","AssuntoPesquisa":"RESET SENHA SIGA-I","Status":"Pendente cliente","NomeCliente":"ATLANTICO","NomeOperadorResponsavel":"FELIPE.DIAS","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-005671","AssuntoPesquisa":"Usuario Administrador bloqueado","Status":"Pendente cliente","NomeCliente":"MINAS TRANSPORTES","NomeOperadorResponsavel":"FELIPE.DIAS","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-005492","AssuntoPesquisa":"Acerto saldo extrato","Status":"Pendente cliente","NomeCliente":"JUATUBA","NomeOperadorResponsavel":"FELIPE.DIAS","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-005442","AssuntoPesquisa":"PARAMETRIZAÇÃO ICB CBS PARA CT-E","Status":"Pendente cliente","NomeCliente":"CATTANI SUL","NomeOperadorResponsavel":"MATHEUS.SILVA","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-005374","AssuntoPesquisa":"Não consigo emitir uma NF","Status":"Pendente cliente","NomeCliente":"ALCINO COTTA","NomeOperadorResponsavel":"FELIPE.DIAS","Grupo de Atendimento":"Siga-i ADM"},
+    {"Protocolo":"0526-005209","AssuntoPesquisa":"Mesmo problema do chamado 0426-003411","Status":"Pendente cliente","NomeCliente":"JOKA TRANSPORTES","NomeOperadorResponsavel":"FELIPE.DIAS","Grupo de Atendimento":"Siga-i ADM"}
+  ],
+  "por_consultor": [
+    {"NomeOperadorResponsavel":"FELIPE.DIAS","Em andamento":3,"Concluído":412,"Total":415},
+    {"NomeOperadorResponsavel":"MATHEUS.SILVA","Em andamento":3,"Concluído":201,"Total":204},
+    {"NomeOperadorResponsavel":"PEDRO.JORDAO","Em andamento":2,"Concluído":109,"Total":111},
+    {"NomeOperadorResponsavel":"DANIEL HEILBUTH","Em andamento":1,"Concluído":79,"Total":80},
+    {"NomeOperadorResponsavel":"RAFAEL.BASTOS","Em andamento":0,"Concluído":76,"Total":76},
+    {"NomeOperadorResponsavel":"VICTOR.SOUSA","Em andamento":0,"Concluído":45,"Total":45},
+    {"NomeOperadorResponsavel":"MATHEUS.SANTOS","Em andamento":0,"Concluído":17,"Total":17},
+    {"NomeOperadorResponsavel":"PEDRO.HENRIQUE","Em andamento":0,"Concluído":9,"Total":9},
+    {"NomeOperadorResponsavel":"ELISMAR.SILVA","Em andamento":0,"Concluído":7,"Total":7},
+    {"NomeOperadorResponsavel":"ADILSON.MONTES","Em andamento":0,"Concluído":7,"Total":7},
+    {"NomeOperadorResponsavel":"WILLIANS.SANTOS","Em andamento":1,"Concluído":5,"Total":6},
+    {"NomeOperadorResponsavel":"GUSTAVO.SOARES","Em andamento":0,"Concluído":6,"Total":6}
+  ],
+  "col_names": {
+    "status": "Status",
+    "grupo":  "Grupo de Atendimento",
+    "resp":   "NomeOperadorResponsavel",
+    "ticket": "Protocolo"
+  }
+}
