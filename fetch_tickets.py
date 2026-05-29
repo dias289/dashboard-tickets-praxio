@@ -35,7 +35,7 @@ def get_xlsx_via_selenium():
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
-    import requests
+    import requests as req
 
     download_dir = os.path.abspath("downloads")
     os.makedirs(download_dir, exist_ok=True)
@@ -46,9 +46,83 @@ def get_xlsx_via_selenium():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
-    options.add_experimental_option("prefs", {
-        "download.default_directory": download_dir,
-        "download.prompt_for_download": False,
+
+    driver = webdriver.Chrome(options=options)
+    wait = WebDriverWait(driver, 30)
+
+    try:
+        print("Abrindo pagina de login...")
+        driver.get(f"{BASE_URL}/Home/Index")
+        time.sleep(3)
+
+        print(f"URL atual: {driver.current_url}")
+        print(f"Titulo: {driver.title}")
+
+        # Mostra todos os inputs da pagina para debug
+        inputs = driver.find_elements(By.TAG_NAME, "input")
+        for inp in inputs:
+            print(f"  input: id={inp.get_attribute('id')} name={inp.get_attribute('name')} type={inp.get_attribute('type')}")
+
+        # Mostra todos os buttons
+        buttons = driver.find_elements(By.TAG_NAME, "button")
+        for btn in buttons:
+            print(f"  button: id={btn.get_attribute('id')} type={btn.get_attribute('type')} text={btn.text}")
+
+        print("Preenchendo credenciais...")
+        campo_login = driver.find_element(By.ID, "txtLogin")
+        campo_login.clear()
+        campo_login.send_keys(EMAIL)
+
+        campo_senha = driver.find_element(By.ID, "txtSenha")
+        campo_senha.clear()
+        campo_senha.send_keys(SENHA)
+
+        print("Submetendo formulario via JavaScript...")
+        driver.execute_script("document.getElementById('frmHome').submit();")
+
+        print("Aguardando redirect (60s)...")
+        time.sleep(5)
+        print(f"URL apos submit: {driver.current_url}")
+        print(f"Titulo apos submit: {driver.title}")
+
+        # Espera ate 60 segundos pela pagina de tickets
+        for i in range(12):
+            time.sleep(5)
+            url_atual = driver.current_url
+            print(f"  [{i*5+5}s] URL: {url_atual}")
+            if "/Ticket" in url_atual:
+                print("Redirect detectado!")
+                break
+        else:
+            # Salva screenshot para debug
+            driver.save_screenshot("debug_screenshot.png")
+            page_source = driver.page_source[:1000]
+            print(f"Page source: {page_source}")
+            raise RuntimeError("Timeout: nao redirecionou para /Ticket")
+
+        cookies = {c["name"]: c["value"] for c in driver.get_cookies()}
+        print(f"Cookies: {list(cookies.keys())}")
+
+        session = req.Session()
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        })
+        for name, value in cookies.items():
+            session.cookies.set(name, value)
+
+        print("Baixando xlsx...")
+        resp = session.get(EXPORT_URL, timeout=120)
+        print(f"Content-Type: {resp.headers.get('Content-Type','?')}")
+        print(f"Tamanho: {len(resp.content)} bytes")
+
+        if b"<!DOCTYPE" in resp.content[:100]:
+            raise RuntimeError("Retornou HTML mesmo com cookies do Selenium")
+
+        return resp.content
+
+    finally:
+        driver.quit()
     })
 
     driver = webdriver.Chrome(options=options)
