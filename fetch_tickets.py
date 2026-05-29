@@ -51,14 +51,19 @@ def login(session: requests.Session) -> bool:
         "Email": EMAIL,
         "Senha": SENHA,
     }
-    if token:
-        payload["__RequestVerificationToken"] = token
-
-    login_post = session.post(
-        f"{BASE_URL}/Home/Login",
-        data=payload,
-        timeout=30,
-        allow_redirects=True,
+   def download_xlsx(session: requests.Session) -> bytes:
+    """Baixa o arquivo xlsx do portal."""
+    resp = session.get(EXPORT_URL, timeout=120)
+    resp.raise_for_status()
+    content = resp.content
+    # Diagnóstico
+    print(f"Content-Type: {resp.headers.get('Content-Type','?')}")
+    print(f"Tamanho: {len(content)} bytes")
+    print(f"Primeiros 300 bytes: {content[:300]}")
+    # Se for HTML (redirecionou para login), lança erro claro
+    if content[:5] in [b'<html', b'<!DOC', b'<HTML']:
+        raise RuntimeError(f"Portal retornou HTML em vez de xlsx. Sessão inválida?\n{content[:500]}")
+    return content
     )
 
     # Considera logado se não voltou para a página de login
