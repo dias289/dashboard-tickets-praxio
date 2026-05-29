@@ -9,7 +9,6 @@ EMAIL = os.environ["PORTAL_EMAIL"]
 SENHA = os.environ["PORTAL_SENHA"]
 
 BASE_URL = "https://portaldocliente.praxio.com.br"
-LOGIN_URL = f"{BASE_URL}/Home/Index"
 EXPORT_URL = (
     f"{BASE_URL}/Ticket/ExportTo?tipo=2&configsGrid="
     "[[%22Protocolo%22,true,2,87.090909],[%22AssuntoPesquisa%22,true,3,382.090909],"
@@ -32,19 +31,19 @@ EXPORT_URL = (
 
 
 def login(session):
-    resp = session.get(LOGIN_URL, timeout=30)
-    resp.raise_for_status()
-    token = ""
-    if "__RequestVerificationToken" in resp.text:
-        import re
-        match = re.search(r'name="__RequestVerificationToken"[^>]+value="([^"]+)"', resp.text)
-        if match:
-            token = match.group(1)
-    payload = {"Email": EMAIL, "Senha": SENHA}
-    if token:
-        payload["__RequestVerificationToken"] = token
-    login_post = session.post(f"{BASE_URL}/Home/Login", data=payload, timeout=30, allow_redirects=True)
-    return "Ticket" in login_post.url or login_post.status_code == 200
+    # Pega a página inicial para obter o cookie de sessão
+    session.get(f"{BASE_URL}/Home/Index", timeout=30)
+    # Faz o login com os campos corretos
+    resp = session.post(
+        f"{BASE_URL}/Home/Entrar",
+        data={"txtLogin": EMAIL, "txtSenha": SENHA, "ReturnUrl": ""},
+        timeout=30,
+        allow_redirects=True,
+    )
+    logado = "Ticket" in resp.url or resp.url.endswith("/Ticket")
+    print(f"URL apos login: {resp.url}")
+    print(f"Status: {resp.status_code}")
+    return logado
 
 
 def download_xlsx(session):
@@ -53,9 +52,8 @@ def download_xlsx(session):
     content = resp.content
     print(f"Content-Type: {resp.headers.get('Content-Type', '?')}")
     print(f"Tamanho: {len(content)} bytes")
-    print(f"Primeiros 300 bytes: {content[:300]}")
-    if content[:5] in [b"<html", b"<!DOC", b"<HTML"]:
-        raise RuntimeError(f"Portal retornou HTML. Sessão inválida?\n{content[:500]}")
+    if b"<!DOCTYPE" in content[:100] or b"<html" in content[:100]:
+        raise RuntimeError(f"Portal retornou HTML. Sessao expirou?\n{content[:300]}")
     return content
 
 
@@ -68,11 +66,11 @@ def process_data(xlsx_bytes):
     col_resp   = next(c for c in df.columns if "Respons" in c)
     col_ticket = next(c for c in df.columns if "ticket" in c.lower() or "protocolo" in c.lower())
 
-    valid_statuses = ["Em andamento", "Concluído", "Cancelado", "Pendente cliente", "Pendente Cliente"]
-    df = df[df[col_status].isin(valid_statuses)].copy()
+    valid = ["Em andamento", "Concluído", "Cancelado", "Pendente cliente", "Pendente Cliente"]
+    df = df[df[col_status].isin(valid)].copy()
     df[col_status] = df[col_status].str.strip()
     df[col_grupo]  = df[col_grupo].fillna("Sem grupo").str.strip()
-    df[col_resp]   = df[col_resp].fillna("Sem responsável").str.strip()
+    df[col_resp]   = df[col_resp].fillna("Sem responsavel").str.strip()
 
     tickets_por_time = {str(k): int(v) for k, v in
         df.groupby(col_grupo)[col_ticket].count().sort_values(ascending=False).items()}
@@ -93,7 +91,7 @@ def process_data(xlsx_bytes):
     por_consultor["Total"] = por_consultor["Em andamento"] + por_consultor["Concluído"]
     por_consultor = por_consultor.sort_values("Total", ascending=False)
 
-    def to_records(d):
+    def to_rec(d):
         return json.loads(d.to_json(orient="records", force_ascii=False, date_format="iso"))
 
     return {
@@ -106,11 +104,16 @@ def process_data(xlsx_bytes):
             "concluidos":       int(len(df[df[col_status] == "Concluído"])),
         },
         "tickets_por_time":  tickets_por_time,
-        "em_andamento":      to_records(em_andamento),
-        "cancelados":        to_records(cancelados),
-        "pendente_cliente":  to_records(pendente_cliente),
-        "por_consultor":     to_records(por_consultor),
-        "col_names": {"status": col_status, "grupo": col_grupo, "resp": col_resp, "ticket": col_ticket},
+        "em_andamento":      to_rec(em_andamento),
+        "cancelados":        to_rec(cancelados),
+        "pendente_cliente":  to_rec(pendente_cliente),
+        "por_consultor":     to_rec(por_consultor),
+        "col_names": {
+            "status": col_status,
+            "grupo":  col_grupo,
+            "resp":   col_resp,
+            "ticket": col_ticket,
+        },
     }
 
 
@@ -124,7 +127,7 @@ def main():
 
     print("Fazendo login...")
     if not login(session):
-        raise RuntimeError("Falha no login.")
+        raise RuntimeError("Falha no login — verifique as credenciais.")
     print("Login OK")
 
     print("Baixando relatorio...")
